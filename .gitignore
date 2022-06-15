@@ -1,0 +1,9 @@
+target
+*.node
+**/node_modules
+**/.DS_Store
+npm-debug.log*
+dist/
+index_x64.node
+index_ia32.node
+.vscode/settings.json

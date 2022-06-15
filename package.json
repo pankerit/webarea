@@ -1,0 +1,26 @@
+{
+    "name": "webarea",
+    "version": "0.2.0",
+    "description": "",
+    "main": "webview.js",
+    "scripts": {
+        "build-release:ia32": "cargo-cp-artifact -nc webarea_ia32.node -- cargo build --release --target=i686-pc-windows-msvc --message-format=json-render-diagnostics",
+        "build-release:x64": "cargo-cp-artifact -nc webarea_x64.node -- cargo build --release --target=x86_64-pc-windows-msvc --message-format=json-render-diagnostics",
+        "build": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics",
+        "build-debug": "npm run build --",
+        "build-release": "npm run build -- --release",
+        "install": "npm run build-release",
+        "test": "cargo test",
+        "dev": "esno watch webview.ts",
+        "deploy": "npm publish ./dist"
+    },
+    "author": "Costea",
+    "license": "ISC",
+    "devDependencies": {
+        "cargo-cp-artifact": "^0.1",
+        "esno": "^0.16.3",
+        "fs-extra": "^10.1.0",
+        "jimp": "^0.16.1",
+        "typescript": "^4.7.3"
+    }
+}
