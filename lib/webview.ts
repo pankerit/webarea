@@ -188,7 +188,8 @@ export class Webview {
 
     // setWindowFrameless(frameless: boolean) {}
 
-    setAlwaysOnTop(alwaysOnTop: boolean) {
+    async setAlwaysOnTop(alwaysOnTop: boolean): Promise<void> {
+        await this.waitUntilReady();
         return new Promise((res) => {
             lib.set_always_on_top(this.#box, alwaysOnTop, res);
         });
