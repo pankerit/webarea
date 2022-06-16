@@ -123,9 +123,19 @@ export class Webview {
         });
     }
 
-    // setMinimized() {}
+    async minimized(): Promise<void> {
+        await this.waitUntilReady();
+        return new Promise((res) => {
+            lib.set_minimized(this.#box, true, res);
+        });
+    }
 
-    // setMaximized() {}
+    async maximized(): Promise<void> {
+        await this.waitUntilReady();
+        return new Promise((res) => {
+            lib.set_minimized(this.#box, false, res);
+        });
+    }
 
     async setTitle(title: string): Promise<void> {
         await this.waitUntilReady();

@@ -1,5 +1,5 @@
 use neon::{prelude::*, types::buffer::TypedArray};
-use std::{collections::HashMap, ops::Deref, sync::Arc};
+use std::{ops::Deref, sync::Arc};
 use wry::{
     application::{
         dpi::{PhysicalPosition, PhysicalSize, Size},
@@ -20,6 +20,7 @@ enum UserEvents {
     EvaluateScript(String, Root<JsFunction>),
     SetInnerSize(u32, u32, Root<JsFunction>),
     GetInnerSize(Root<JsFunction>),
+    SetMinimized(bool, Root<JsFunction>),
     DragWindow,
     SetFocus(Root<JsFunction>),
     SetAlwaysOnTop(bool, Root<JsFunction>),
@@ -138,7 +139,11 @@ fn create(mut cx: FunctionContext) -> JsResult<JsPromise> {
                         Ok(())
                     });
                 }
-
+                Event::UserEvent(UserEvents::SetMinimized(flag, cb)) => {
+                    let window = webview.window();
+                    window.set_minimized(flag);
+                    resolve_node_promise(channel.clone(), cb);
+                }
                 Event::UserEvent(UserEvents::Center(cb)) => {
                     let window = webview.window();
                     if let Some(monitor) = window.current_monitor() {
@@ -312,6 +317,16 @@ fn set_visible(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     Ok(cx.undefined())
 }
 
+fn set_minimized(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let proxy = cx.argument::<JsBox<Ipc>>(0)?;
+    let flag = cx.argument::<JsBoolean>(1)?.value(&mut cx);
+    let cb = cx.argument::<JsFunction>(2)?.root(&mut cx);
+    let proxy = proxy.deref();
+    let proxy = proxy.proxy.clone();
+    let _ = proxy.send_event(UserEvents::SetMinimized(flag, cb));
+    Ok(cx.undefined())
+}
+
 fn evaluate_script(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let proxy = cx.argument::<JsBox<Ipc>>(0)?;
     let script = cx.argument::<JsString>(1)?.value(&mut cx);
@@ -413,6 +428,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("set_inner_size", set_inner_size)?;
     cx.export_function("get_inner_size", get_inner_size)?;
     cx.export_function("set_resizable", set_resizable)?;
+    cx.export_function("set_minimized", set_minimized)?;
     cx.export_function("set_center", set_center)?;
     cx.export_function("evaluate_script", evaluate_script)?;
     cx.export_function("set_always_on_top", set_always_on_top)?;
