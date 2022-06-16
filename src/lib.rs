@@ -12,19 +12,19 @@ use wry::{
 };
 
 enum UserEvents {
-    CloseWindow,
-    Center,
-    ChangeTitle(String),
-    VisibleWindow(bool),
-    ResizableWindow(bool),
-    EvaluateScript(String),
-    SetInnerSize(u32, u32),
-    GetInnerSize,
+    CloseWindow(Root<JsFunction>),
+    Center(Root<JsFunction>),
+    ChangeTitle(String, Root<JsFunction>),
+    VisibleWindow(bool, Root<JsFunction>),
+    ResizableWindow(bool, Root<JsFunction>),
+    EvaluateScript(String, Root<JsFunction>),
+    SetInnerSize(u32, u32, Root<JsFunction>),
+    GetInnerSize(Root<JsFunction>),
     DragWindow,
-    SetFocus,
+    SetFocus(Root<JsFunction>),
     // IgnoreCursorEvents(bool),
-    SetWindowIcon(Vec<u8>, u32, u32),
-    OpenDevtools,
+    SetWindowIcon(Vec<u8>, u32, u32, Root<JsFunction>),
+    OpenDevtools(Root<JsFunction>),
     IpcPostMessage(String),
 }
 
@@ -109,6 +109,15 @@ fn create(mut cx: FunctionContext) -> JsResult<JsPromise> {
             *control_flow = ControlFlow::Wait;
             let cb = cb_arc.clone();
             match event {
+                Event::UserEvent(UserEvents::CloseWindow(cb)) => {
+                    *control_flow = ControlFlow::Exit;
+                    channel.send(move |mut cx| {
+                        let this = cx.undefined();
+                        let callback = cb.into_inner(&mut cx);
+                        let _ = callback.call(&mut cx, this, &[]);
+                        Ok(())
+                    });
+                }
                 Event::UserEvent(UserEvents::IpcPostMessage(payload)) => {
                     channel.send(move |mut cx| {
                         let this = cx.undefined();
@@ -123,10 +132,8 @@ fn create(mut cx: FunctionContext) -> JsResult<JsPromise> {
                         Ok(())
                     });
                 }
-                Event::UserEvent(UserEvents::CloseWindow) => {
-                    *control_flow = ControlFlow::Exit;
-                }
-                Event::UserEvent(UserEvents::Center) => {
+
+                Event::UserEvent(UserEvents::Center(cb)) => {
                     let window = webview.window();
                     if let Some(monitor) = window.current_monitor() {
                         let screen_size = monitor.size();
@@ -134,65 +141,114 @@ fn create(mut cx: FunctionContext) -> JsResult<JsPromise> {
                         let x = (screen_size.width - window_size.width) / 2;
                         let y = (screen_size.height - window_size.height) / 2;
                         window.set_outer_position(PhysicalPosition::new(x, y));
+                        channel.send(move |mut cx| {
+                            let this = cx.undefined();
+                            let callback = cb.into_inner(&mut cx);
+                            let _ = callback.call(&mut cx, this, &[]);
+                            Ok(())
+                        });
                     } else {
                         panic!("Could not get current monitor");
                     }
                 }
-                Event::UserEvent(UserEvents::ChangeTitle(title)) => {
+                Event::UserEvent(UserEvents::ChangeTitle(title, cb)) => {
                     webview.window().set_title(&title);
+                    channel.send(move |mut cx| {
+                        let this = cx.undefined();
+                        let callback = cb.into_inner(&mut cx);
+                        let _ = callback.call(&mut cx, this, &[]);
+                        Ok(())
+                    });
                 }
-                Event::UserEvent(UserEvents::SetInnerSize(width, height)) => {
+                Event::UserEvent(UserEvents::SetInnerSize(width, height, cb)) => {
                     webview
                         .window()
                         .set_inner_size(Size::new(PhysicalSize::new(width, height)));
+                    channel.send(move |mut cx| {
+                        let this = cx.undefined();
+                        let callback = cb.into_inner(&mut cx);
+                        let _ = callback.call(&mut cx, this, &[]);
+                        Ok(())
+                    });
                 }
-                Event::UserEvent(UserEvents::GetInnerSize) => {
+                Event::UserEvent(UserEvents::GetInnerSize(cb)) => {
                     let size = webview.window().inner_size();
                     channel.send(move |mut cx| {
                         let this = cx.undefined();
-                        let callback = cb.to_inner(&mut cx);
-                        let event_type = cx.string("getInnerSize");
+                        let callback = cb.into_inner(&mut cx);
                         let event_data = cx.empty_object();
                         let width = cx.number(size.width as f64);
                         let height = cx.number(size.height as f64);
                         event_data.set(&mut cx, "width", width).unwrap();
                         event_data.set(&mut cx, "height", height).unwrap();
-                        let _ = callback.call(
-                            &mut cx,
-                            this,
-                            &[event_type.upcast(), event_data.upcast()],
-                        );
+                        let _ = callback.call(&mut cx, this, &[event_data.upcast()]);
                         Ok(())
                     });
                 }
-                Event::UserEvent(UserEvents::SetWindowIcon(rgba, width, height)) => {
+                Event::UserEvent(UserEvents::SetWindowIcon(rgba, width, height, cb)) => {
                     let icon = Icon::from_rgba(rgba, width, height);
                     match icon {
                         Ok(icon) => {
                             webview.window().set_window_icon(Some(icon));
+                            channel.send(move |mut cx| {
+                                let this = cx.undefined();
+                                let callback = cb.into_inner(&mut cx);
+                                let _ = callback.call(&mut cx, this, &[]);
+                                Ok(())
+                            });
                         }
                         Err(err) => {
                             panic!("{}", err);
                         }
                     }
                 }
-                Event::UserEvent(UserEvents::OpenDevtools) => {
+                Event::UserEvent(UserEvents::OpenDevtools(cb)) => {
                     webview.open_devtools();
+                    channel.send(move |mut cx| {
+                        let this = cx.undefined();
+                        let callback = cb.into_inner(&mut cx);
+                        let _ = callback.call(&mut cx, this, &[]);
+                        Ok(())
+                    });
                 }
                 Event::UserEvent(UserEvents::DragWindow) => {
-                    webview.window().drag_window();
+                    let _ = webview.window().drag_window();
                 }
-                Event::UserEvent(UserEvents::SetFocus) => {
+                Event::UserEvent(UserEvents::SetFocus(cb)) => {
                     webview.window().set_focus();
+                    channel.send(move |mut cx| {
+                        let this = cx.undefined();
+                        let callback = cb.into_inner(&mut cx);
+                        let _ = callback.call(&mut cx, this, &[]);
+                        Ok(())
+                    });
                 }
-                Event::UserEvent(UserEvents::VisibleWindow(visible)) => {
+                Event::UserEvent(UserEvents::VisibleWindow(visible, cb)) => {
                     webview.window().set_visible(visible);
+                    channel.send(move |mut cx| {
+                        let this = cx.undefined();
+                        let callback = cb.into_inner(&mut cx);
+                        let _ = callback.call(&mut cx, this, &[]);
+                        Ok(())
+                    });
                 }
-                Event::UserEvent(UserEvents::ResizableWindow(resizable)) => {
+                Event::UserEvent(UserEvents::ResizableWindow(resizable, cb)) => {
                     webview.window().set_resizable(resizable);
+                    channel.send(move |mut cx| {
+                        let this = cx.undefined();
+                        let callback = cb.into_inner(&mut cx);
+                        let _ = callback.call(&mut cx, this, &[]);
+                        Ok(())
+                    });
                 }
-                Event::UserEvent(UserEvents::EvaluateScript(script)) => {
+                Event::UserEvent(UserEvents::EvaluateScript(script, cb)) => {
                     let _ = webview.evaluate_script(&script);
+                    channel.send(move |mut cx| {
+                        let this = cx.undefined();
+                        let callback = cb.into_inner(&mut cx);
+                        let _ = callback.call(&mut cx, this, &[]);
+                        Ok(())
+                    });
                 }
                 Event::NewEvents(StartCause::Init) => println!("Wry has started!"),
                 Event::WindowEvent { event, .. } => match event {
@@ -235,17 +291,19 @@ fn create(mut cx: FunctionContext) -> JsResult<JsPromise> {
 
 fn open_devtools(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let proxy = cx.argument::<JsBox<Ipc>>(0)?;
+    let cb = cx.argument::<JsFunction>(1)?.root(&mut cx);
     let proxy = proxy.deref();
     let proxy = proxy.proxy.clone();
-    let _ = proxy.send_event(UserEvents::OpenDevtools);
+    let _ = proxy.send_event(UserEvents::OpenDevtools(cb));
     Ok(cx.undefined())
 }
 
 fn close(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let proxy = cx.argument::<JsBox<Ipc>>(0)?;
+    let cb = cx.argument::<JsFunction>(1)?.root(&mut cx);
     let proxy = proxy.deref();
     let proxy = proxy.proxy.clone();
-    let _ = proxy.send_event(UserEvents::CloseWindow);
+    let _ = proxy.send_event(UserEvents::CloseWindow(cb));
     Ok(cx.undefined())
 }
 
@@ -254,52 +312,49 @@ fn set_window_icon(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let rgba = cx.argument::<JsBuffer>(1)?.as_slice(&cx).to_vec();
     let width = cx.argument::<JsNumber>(2)?.value(&mut cx) as u32;
     let height = cx.argument::<JsNumber>(3)?.value(&mut cx) as u32;
+    let cb = cx.argument::<JsFunction>(4)?.root(&mut cx);
     let proxy = proxy.deref();
     let proxy = proxy.proxy.clone();
-    let _ = proxy.send_event(UserEvents::SetWindowIcon(rgba, width, height));
-    Ok(cx.undefined())
-}
-
-fn drag_window(mut cx: FunctionContext) -> JsResult<JsUndefined> {
-    let proxy = cx.argument::<JsBox<Ipc>>(0)?;
-    let proxy = proxy.deref();
-    let proxy = proxy.proxy.clone();
-    let _ = proxy.send_event(UserEvents::DragWindow);
+    let _ = proxy.send_event(UserEvents::SetWindowIcon(rgba, width, height, cb));
     Ok(cx.undefined())
 }
 
 fn set_visible(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let proxy = cx.argument::<JsBox<Ipc>>(0)?;
     let flag = cx.argument::<JsBoolean>(1)?.value(&mut cx);
+    let cb = cx.argument::<JsFunction>(2)?.root(&mut cx);
     let proxy = proxy.deref();
     let proxy = proxy.proxy.clone();
-    let _ = proxy.send_event(UserEvents::VisibleWindow(flag));
+    let _ = proxy.send_event(UserEvents::VisibleWindow(flag, cb));
     Ok(cx.undefined())
 }
 
 fn evaluate_script(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let proxy = cx.argument::<JsBox<Ipc>>(0)?;
     let script = cx.argument::<JsString>(1)?.value(&mut cx);
+    let cb = cx.argument::<JsFunction>(2)?.root(&mut cx);
     let proxy = proxy.deref();
     let proxy = proxy.proxy.clone();
-    let _ = proxy.send_event(UserEvents::EvaluateScript(script));
+    let _ = proxy.send_event(UserEvents::EvaluateScript(script, cb));
     Ok(cx.undefined())
 }
 
 fn set_focus(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let proxy = cx.argument::<JsBox<Ipc>>(0)?;
+    let cb = cx.argument::<JsFunction>(1)?.root(&mut cx);
     let proxy = proxy.deref();
     let proxy = proxy.proxy.clone();
-    let _ = proxy.send_event(UserEvents::SetFocus);
+    let _ = proxy.send_event(UserEvents::SetFocus(cb));
     Ok(cx.undefined())
 }
 
 fn set_title(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let proxy = cx.argument::<JsBox<Ipc>>(0)?;
     let title = cx.argument::<JsString>(1)?.value(&mut cx);
+    let cb = cx.argument::<JsFunction>(2)?.root(&mut cx);
     let proxy = proxy.deref();
     let proxy = proxy.proxy.clone();
-    let _ = proxy.send_event(UserEvents::ChangeTitle(title));
+    let _ = proxy.send_event(UserEvents::ChangeTitle(title, cb));
     Ok(cx.undefined())
 }
 
@@ -307,34 +362,38 @@ fn set_inner_size(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let proxy = cx.argument::<JsBox<Ipc>>(0)?;
     let width = cx.argument::<JsNumber>(1)?.value(&mut cx) as u32;
     let height = cx.argument::<JsNumber>(2)?.value(&mut cx) as u32;
+    let cb = cx.argument::<JsFunction>(3)?.root(&mut cx);
     let proxy = proxy.deref();
     let proxy = proxy.proxy.clone();
-    let _ = proxy.send_event(UserEvents::SetInnerSize(width, height));
+    let _ = proxy.send_event(UserEvents::SetInnerSize(width, height, cb));
     Ok(cx.undefined())
 }
 
 fn get_inner_size(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let proxy = cx.argument::<JsBox<Ipc>>(0)?;
+    let cb = cx.argument::<JsFunction>(1)?.root(&mut cx);
     let proxy = proxy.deref();
     let proxy = proxy.proxy.clone();
-    let _ = proxy.send_event(UserEvents::GetInnerSize);
+    let _ = proxy.send_event(UserEvents::GetInnerSize(cb));
     Ok(cx.undefined())
 }
 
 fn set_resizable(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let proxy = cx.argument::<JsBox<Ipc>>(0)?;
     let flag = cx.argument::<JsBoolean>(1)?.value(&mut cx);
+    let cb = cx.argument::<JsFunction>(2)?.root(&mut cx);
     let proxy = proxy.deref();
     let proxy = proxy.proxy.clone();
-    let _ = proxy.send_event(UserEvents::ResizableWindow(flag));
+    let _ = proxy.send_event(UserEvents::ResizableWindow(flag, cb));
     Ok(cx.undefined())
 }
 
 fn set_center(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let proxy = cx.argument::<JsBox<Ipc>>(0)?;
+    let cb = cx.argument::<JsFunction>(1)?.root(&mut cx);
     let proxy = proxy.deref();
     let proxy = proxy.proxy.clone();
-    let _ = proxy.send_event(UserEvents::Center);
+    let _ = proxy.send_event(UserEvents::Center(cb));
     Ok(cx.undefined())
 }
 
@@ -352,7 +411,6 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("create", create)?;
     cx.export_function("close", close)?;
     cx.export_function("set_window_icon", set_window_icon)?;
-    cx.export_function("drag_window", drag_window)?;
     cx.export_function("set_visible", set_visible)?;
     cx.export_function("set_focus", set_focus)?;
     cx.export_function("set_title", set_title)?;

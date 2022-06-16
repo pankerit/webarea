@@ -101,58 +101,75 @@ export class Webview {
         }
     };
 
-    async close() {
+    async close(): Promise<void> {
         await this.waitUntilReady();
-        lib.close(this.#box);
         this.ipc.removeAllListeners();
+        return new Promise((resolve) => {
+            lib.close(this.#box, resolve);
+        });
     }
 
-    async focus() {
+    async focus(): Promise<void> {
         await this.waitUntilReady();
-        lib.set_focus(this.#box);
+        return new Promise((res) => {
+            lib.set_focus(this.#box, res);
+        });
     }
 
-    async center() {
+    async center(): Promise<void> {
         await this.waitUntilReady();
-        lib.set_center(this.#box);
+        return new Promise((res) => {
+            lib.set_center(this.#box, res);
+        });
     }
 
     // setMinimized() {}
 
     // setMaximized() {}
 
-    async setTitle(title: string) {
+    async setTitle(title: string): Promise<void> {
         await this.waitUntilReady();
-        lib.set_title(this.#box, title);
+        return new Promise((res) => {
+            lib.set_title(this.#box, title, res);
+        });
     }
 
-    async setVisible(visible: boolean) {
+    async setVisible(visible: boolean): Promise<void> {
         await this.waitUntilReady();
-        lib.set_visible(this.#box, visible);
+        return new Promise((res) => {
+            lib.set_visible(this.#box, visible, res);
+        });
     }
 
-    async setResizable(resizable: boolean) {
+    async setResizable(resizable: boolean): Promise<void> {
         await this.waitUntilReady();
-        lib.set_resizable(this.#box, resizable);
+        return new Promise((res) => {
+            lib.set_resizable(this.#box, resizable, res);
+        });
     }
 
-    async openDevtools() {
+    async openDevtools(): Promise<void> {
         if (this.option?.devtools) {
             await this.waitUntilReady();
-            lib.open_devtools(this.#box);
+            return new Promise((res) => {
+                lib.open_devtools(this.#box, res);
+            });
+        } else {
+            console.warn("Devtools are disabled");
         }
     }
 
-    async setInnerSize(width: number, height: number) {
+    async setInnerSize(width: number, height: number): Promise<void> {
         await this.waitUntilReady();
-        lib.set_inner_size(this.#box, width, height);
+        return new Promise((resolve) => {
+            lib.set_inner_size(this.#box, width, height, resolve);
+        });
     }
 
     async getInnerSize(): Promise<Size> {
         await this.waitUntilReady();
-        lib.get_inner_size(this.#box);
         return new Promise((resolve) => {
-            this.internalEvents.once("getInnerSize", resolve);
+            lib.get_inner_size(this.#box, resolve);
         });
     }
 
@@ -164,7 +181,11 @@ export class Webview {
 
     // setWindowFrameless(frameless: boolean) {}
 
-    // setAlwaysOnTop(alwaysOnTop: boolean) {}
+    // setAlwaysOnTop(alwaysOnTop: boolean) {
+    //     return new Promise((res) => {
+    //         lib.set_always_on_top(this.#box, alwaysOnTop, res);
+    //     });
+    // }
 
     async loadURL(url: string) {
         await this.waitUntilReady();
@@ -178,19 +199,24 @@ export class Webview {
         );
     }
 
-    async evaluateScript(script: string) {
+    async evaluateScript(script: string): Promise<void> {
         await this.waitUntilReady();
-        lib.evaluate_script(this.#box, script);
+        return new Promise((res) => {
+            lib.evaluate_script(this.#box, script, res);
+        });
     }
 
-    async setIcon(bitmap: Bitmap) {
+    async setIcon(bitmap: Bitmap): Promise<void> {
         await this.waitUntilReady();
-        lib.set_icon(this.#box, bitmap.data, bitmap.width, bitmap.height);
-    }
-
-    async dragWindow() {
-        await this.waitUntilReady();
-        lib.drag_window(this.#box);
+        return new Promise((res) => {
+            lib.set_icon(
+                this.#box,
+                bitmap.data,
+                bitmap.width,
+                bitmap.height,
+                res
+            );
+        });
     }
 
     waitUntilReady(): Promise<void> {
