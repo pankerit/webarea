@@ -35,6 +35,15 @@ struct Ipc {
 
 impl Finalize for Ipc {}
 
+fn resolve_node_promise(channel: Channel, cb: Root<JsFunction>) {
+    channel.send(move |mut cx| {
+        let this = cx.undefined();
+        let callback = cb.into_inner(&mut cx);
+        let _ = callback.call(&mut cx, this, &[]);
+        Ok(())
+    });
+}
+
 fn create(mut cx: FunctionContext) -> JsResult<JsPromise> {
     let cb = cx.argument::<JsFunction>(0)?.root(&mut cx);
     let title = cx.argument::<JsString>(1)?.value(&mut cx);
@@ -112,12 +121,7 @@ fn create(mut cx: FunctionContext) -> JsResult<JsPromise> {
             match event {
                 Event::UserEvent(UserEvents::CloseWindow(cb)) => {
                     *control_flow = ControlFlow::Exit;
-                    channel.send(move |mut cx| {
-                        let this = cx.undefined();
-                        let callback = cb.into_inner(&mut cx);
-                        let _ = callback.call(&mut cx, this, &[]);
-                        Ok(())
-                    });
+                    resolve_node_promise(channel.clone(), cb);
                 }
                 Event::UserEvent(UserEvents::IpcPostMessage(payload)) => {
                     channel.send(move |mut cx| {
@@ -142,44 +146,24 @@ fn create(mut cx: FunctionContext) -> JsResult<JsPromise> {
                         let x = (screen_size.width - window_size.width) / 2;
                         let y = (screen_size.height - window_size.height) / 2;
                         window.set_outer_position(PhysicalPosition::new(x, y));
-                        channel.send(move |mut cx| {
-                            let this = cx.undefined();
-                            let callback = cb.into_inner(&mut cx);
-                            let _ = callback.call(&mut cx, this, &[]);
-                            Ok(())
-                        });
+                        resolve_node_promise(channel.clone(), cb);
                     } else {
                         panic!("Could not get current monitor");
                     }
                 }
                 Event::UserEvent(UserEvents::ChangeTitle(title, cb)) => {
                     webview.window().set_title(&title);
-                    channel.send(move |mut cx| {
-                        let this = cx.undefined();
-                        let callback = cb.into_inner(&mut cx);
-                        let _ = callback.call(&mut cx, this, &[]);
-                        Ok(())
-                    });
+                    resolve_node_promise(channel.clone(), cb);
                 }
                 Event::UserEvent(UserEvents::SetAlwaysOnTop(flag, cb)) => {
                     webview.window().set_always_on_top(flag);
-                    channel.send(move |mut cx| {
-                        let this = cx.undefined();
-                        let callback = cb.into_inner(&mut cx);
-                        let _ = callback.call(&mut cx, this, &[]);
-                        Ok(())
-                    });
+                    resolve_node_promise(channel.clone(), cb);
                 }
                 Event::UserEvent(UserEvents::SetInnerSize(width, height, cb)) => {
                     webview
                         .window()
                         .set_inner_size(Size::new(PhysicalSize::new(width, height)));
-                    channel.send(move |mut cx| {
-                        let this = cx.undefined();
-                        let callback = cb.into_inner(&mut cx);
-                        let _ = callback.call(&mut cx, this, &[]);
-                        Ok(())
-                    });
+                    resolve_node_promise(channel.clone(), cb);
                 }
                 Event::UserEvent(UserEvents::GetInnerSize(cb)) => {
                     let size = webview.window().inner_size();
@@ -200,12 +184,7 @@ fn create(mut cx: FunctionContext) -> JsResult<JsPromise> {
                     match icon {
                         Ok(icon) => {
                             webview.window().set_window_icon(Some(icon));
-                            channel.send(move |mut cx| {
-                                let this = cx.undefined();
-                                let callback = cb.into_inner(&mut cx);
-                                let _ = callback.call(&mut cx, this, &[]);
-                                Ok(())
-                            });
+                            resolve_node_promise(channel.clone(), cb);
                         }
                         Err(err) => {
                             panic!("{}", err);
@@ -214,51 +193,26 @@ fn create(mut cx: FunctionContext) -> JsResult<JsPromise> {
                 }
                 Event::UserEvent(UserEvents::OpenDevtools(cb)) => {
                     webview.open_devtools();
-                    channel.send(move |mut cx| {
-                        let this = cx.undefined();
-                        let callback = cb.into_inner(&mut cx);
-                        let _ = callback.call(&mut cx, this, &[]);
-                        Ok(())
-                    });
+                    resolve_node_promise(channel.clone(), cb);
                 }
                 Event::UserEvent(UserEvents::DragWindow) => {
                     let _ = webview.window().drag_window();
                 }
                 Event::UserEvent(UserEvents::SetFocus(cb)) => {
                     webview.window().set_focus();
-                    channel.send(move |mut cx| {
-                        let this = cx.undefined();
-                        let callback = cb.into_inner(&mut cx);
-                        let _ = callback.call(&mut cx, this, &[]);
-                        Ok(())
-                    });
+                    resolve_node_promise(channel.clone(), cb);
                 }
                 Event::UserEvent(UserEvents::VisibleWindow(visible, cb)) => {
                     webview.window().set_visible(visible);
-                    channel.send(move |mut cx| {
-                        let this = cx.undefined();
-                        let callback = cb.into_inner(&mut cx);
-                        let _ = callback.call(&mut cx, this, &[]);
-                        Ok(())
-                    });
+                    resolve_node_promise(channel.clone(), cb);
                 }
                 Event::UserEvent(UserEvents::ResizableWindow(resizable, cb)) => {
                     webview.window().set_resizable(resizable);
-                    channel.send(move |mut cx| {
-                        let this = cx.undefined();
-                        let callback = cb.into_inner(&mut cx);
-                        let _ = callback.call(&mut cx, this, &[]);
-                        Ok(())
-                    });
+                    resolve_node_promise(channel.clone(), cb);
                 }
                 Event::UserEvent(UserEvents::EvaluateScript(script, cb)) => {
                     let _ = webview.evaluate_script(&script);
-                    channel.send(move |mut cx| {
-                        let this = cx.undefined();
-                        let callback = cb.into_inner(&mut cx);
-                        let _ = callback.call(&mut cx, this, &[]);
-                        Ok(())
-                    });
+                    resolve_node_promise(channel.clone(), cb);
                 }
                 Event::NewEvents(StartCause::Init) => println!("Wry has started!"),
                 Event::WindowEvent { event, .. } => match event {
