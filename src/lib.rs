@@ -23,7 +23,7 @@ enum UserEvents {
     DragWindow,
     SetFocus(Root<JsFunction>),
     SetAlwaysOnTop(bool, Root<JsFunction>),
-    // IgnoreCursorEvents(bool),
+    SetIgnoreCursorEvents(bool, Root<JsFunction>),
     SetWindowIcon(Vec<u8>, u32, u32, Root<JsFunction>),
     OpenDevtools(Root<JsFunction>),
     CloseDevtools(Root<JsFunction>),
@@ -151,6 +151,11 @@ fn create(mut cx: FunctionContext) -> JsResult<JsPromise> {
                     } else {
                         panic!("Could not get current monitor");
                     }
+                }
+                Event::UserEvent(UserEvents::SetIgnoreCursorEvents(flag, cb)) => {
+                    let window = webview.window();
+                    let _ = window.set_ignore_cursor_events(flag);
+                    resolve_node_promise(channel.clone(), cb);
                 }
                 Event::UserEvent(UserEvents::ChangeTitle(title, cb)) => {
                     webview.window().set_title(&title);
@@ -385,14 +390,15 @@ fn set_always_on_top(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     Ok(cx.undefined())
 }
 
-// fn set_ignore_cursor_events(mut cx: FunctionContext) -> JsResult<JsUndefined> {
-//     let proxy = cx.argument::<JsBox<Ipc>>(0)?;
-//     let flag = cx.argument::<JsBoolean>(0)?.value(&mut cx);
-//     let proxy = proxy.deref();
-//     let proxy = proxy.proxy.clone();
-//     let _ = proxy.send_event(UserEvents::IgnoreCursorEvents(flag));
-//     Ok(cx.undefined())
-// }
+fn set_ignore_cursor_events(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let proxy = cx.argument::<JsBox<Ipc>>(0)?;
+    let flag = cx.argument::<JsBoolean>(1)?.value(&mut cx);
+    let cb = cx.argument::<JsFunction>(2)?.root(&mut cx);
+    let proxy = proxy.deref();
+    let proxy = proxy.proxy.clone();
+    let _ = proxy.send_event(UserEvents::SetIgnoreCursorEvents(flag, cb));
+    Ok(cx.undefined())
+}
 
 #[neon::main]
 fn main(mut cx: ModuleContext) -> NeonResult<()> {
@@ -410,5 +416,6 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("set_center", set_center)?;
     cx.export_function("evaluate_script", evaluate_script)?;
     cx.export_function("set_always_on_top", set_always_on_top)?;
+    cx.export_function("set_ignore_cursor_events", set_ignore_cursor_events)?;
     Ok(())
 }

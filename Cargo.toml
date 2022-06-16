@@ -14,7 +14,7 @@ crate-type = ["cdylib"]
 
 
 [dependencies.wry]
-version = "0.18"
+version = "0.18.3"
 features = ["devtools"]
 
 [dependencies.neon]
