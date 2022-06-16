@@ -22,6 +22,7 @@ enum UserEvents {
     GetInnerSize(Root<JsFunction>),
     DragWindow,
     SetFocus(Root<JsFunction>),
+    SetAlwaysOnTop(bool, Root<JsFunction>),
     // IgnoreCursorEvents(bool),
     SetWindowIcon(Vec<u8>, u32, u32, Root<JsFunction>),
     OpenDevtools(Root<JsFunction>),
@@ -153,6 +154,15 @@ fn create(mut cx: FunctionContext) -> JsResult<JsPromise> {
                 }
                 Event::UserEvent(UserEvents::ChangeTitle(title, cb)) => {
                     webview.window().set_title(&title);
+                    channel.send(move |mut cx| {
+                        let this = cx.undefined();
+                        let callback = cb.into_inner(&mut cx);
+                        let _ = callback.call(&mut cx, this, &[]);
+                        Ok(())
+                    });
+                }
+                Event::UserEvent(UserEvents::SetAlwaysOnTop(flag, cb)) => {
+                    webview.window().set_always_on_top(flag);
                     channel.send(move |mut cx| {
                         let this = cx.undefined();
                         let callback = cb.into_inner(&mut cx);
@@ -397,6 +407,16 @@ fn set_center(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     Ok(cx.undefined())
 }
 
+fn set_always_on_top(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let proxy = cx.argument::<JsBox<Ipc>>(0)?;
+    let flag = cx.argument::<JsBoolean>(1)?.value(&mut cx);
+    let cb = cx.argument::<JsFunction>(2)?.root(&mut cx);
+    let proxy = proxy.deref();
+    let proxy = proxy.proxy.clone();
+    let _ = proxy.send_event(UserEvents::SetAlwaysOnTop(flag, cb));
+    Ok(cx.undefined())
+}
+
 // fn set_ignore_cursor_events(mut cx: FunctionContext) -> JsResult<JsUndefined> {
 //     let proxy = cx.argument::<JsBox<Ipc>>(0)?;
 //     let flag = cx.argument::<JsBoolean>(0)?.value(&mut cx);
@@ -420,5 +440,6 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("set_resizable", set_resizable)?;
     cx.export_function("set_center", set_center)?;
     cx.export_function("evaluate_script", evaluate_script)?;
+    cx.export_function("set_always_on_top", set_always_on_top)?;
     Ok(())
 }

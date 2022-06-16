@@ -181,11 +181,11 @@ export class Webview {
 
     // setWindowFrameless(frameless: boolean) {}
 
-    // setAlwaysOnTop(alwaysOnTop: boolean) {
-    //     return new Promise((res) => {
-    //         lib.set_always_on_top(this.#box, alwaysOnTop, res);
-    //     });
-    // }
+    setAlwaysOnTop(alwaysOnTop: boolean) {
+        return new Promise((res) => {
+            lib.set_always_on_top(this.#box, alwaysOnTop, res);
+        });
+    }
 
     async loadURL(url: string) {
         await this.waitUntilReady();
