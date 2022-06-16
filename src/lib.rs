@@ -26,6 +26,7 @@ enum UserEvents {
     // IgnoreCursorEvents(bool),
     SetWindowIcon(Vec<u8>, u32, u32, Root<JsFunction>),
     OpenDevtools(Root<JsFunction>),
+    CloseDevtools(Root<JsFunction>),
     IpcPostMessage(String),
 }
 
@@ -195,6 +196,10 @@ fn create(mut cx: FunctionContext) -> JsResult<JsPromise> {
                     webview.open_devtools();
                     resolve_node_promise(channel.clone(), cb);
                 }
+                Event::UserEvent(UserEvents::CloseDevtools(cb)) => {
+                    webview.close_devtools();
+                    resolve_node_promise(channel.clone(), cb);
+                }
                 Event::UserEvent(UserEvents::DragWindow) => {
                     let _ = webview.window().drag_window();
                 }
@@ -259,6 +264,15 @@ fn open_devtools(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let proxy = proxy.deref();
     let proxy = proxy.proxy.clone();
     let _ = proxy.send_event(UserEvents::OpenDevtools(cb));
+    Ok(cx.undefined())
+}
+
+fn close_devtools(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let proxy = cx.argument::<JsBox<Ipc>>(0)?;
+    let cb = cx.argument::<JsFunction>(1)?.root(&mut cx);
+    let proxy = proxy.deref();
+    let proxy = proxy.proxy.clone();
+    let _ = proxy.send_event(UserEvents::CloseDevtools(cb));
     Ok(cx.undefined())
 }
 
@@ -389,6 +403,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("set_focus", set_focus)?;
     cx.export_function("set_title", set_title)?;
     cx.export_function("open_devtools", open_devtools)?;
+    cx.export_function("close_devtools", close_devtools)?;
     cx.export_function("set_inner_size", set_inner_size)?;
     cx.export_function("get_inner_size", get_inner_size)?;
     cx.export_function("set_resizable", set_resizable)?;

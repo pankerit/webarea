@@ -159,6 +159,13 @@ export class Webview {
         }
     }
 
+    async closeDevtools(): Promise<void> {
+        await this.waitUntilReady();
+        return new Promise((res) => {
+            lib.close_devtools(this.#box, res);
+        });
+    }
+
     async setInnerSize(width: number, height: number): Promise<void> {
         await this.waitUntilReady();
         return new Promise((resolve) => {
