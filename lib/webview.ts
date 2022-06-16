@@ -196,7 +196,12 @@ export class Webview {
 
     // setMaxInnerSize(width: number, height: number) {}
 
-    // setWindowFrameless(frameless: boolean) {}
+    async setFrameless(frameless: boolean) {
+        await this.waitUntilReady();
+        return new Promise((res) => {
+            lib.set_frameless(this.#box, frameless, res);
+        });
+    }
     async setIgnoreCursorEvents(ignoreCursorEvents: boolean): Promise<void> {
         await this.waitUntilReady();
         return new Promise((res) => {

@@ -28,6 +28,7 @@ enum UserEvents {
     SetWindowIcon(Vec<u8>, u32, u32, Root<JsFunction>),
     OpenDevtools(Root<JsFunction>),
     CloseDevtools(Root<JsFunction>),
+    SetFrameless(bool, Root<JsFunction>),
     IpcPostMessage(String),
 }
 
@@ -138,6 +139,11 @@ fn create(mut cx: FunctionContext) -> JsResult<JsPromise> {
                         );
                         Ok(())
                     });
+                }
+                Event::UserEvent(UserEvents::SetFrameless(flag, cb)) => {
+                    let window = webview.window();
+                    window.set_decorations(!flag);
+                    resolve_node_promise(channel.clone(), cb);
                 }
                 Event::UserEvent(UserEvents::SetMinimized(flag, cb)) => {
                     let window = webview.window();
@@ -415,6 +421,16 @@ fn set_ignore_cursor_events(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     Ok(cx.undefined())
 }
 
+fn set_frameless(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let proxy = cx.argument::<JsBox<Ipc>>(0)?;
+    let flag = cx.argument::<JsBoolean>(1)?.value(&mut cx);
+    let cb = cx.argument::<JsFunction>(2)?.root(&mut cx);
+    let proxy = proxy.deref();
+    let proxy = proxy.proxy.clone();
+    let _ = proxy.send_event(UserEvents::SetFrameless(flag, cb));
+    Ok(cx.undefined())
+}
+
 #[neon::main]
 fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("create", create)?;
@@ -432,6 +448,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("set_center", set_center)?;
     cx.export_function("evaluate_script", evaluate_script)?;
     cx.export_function("set_always_on_top", set_always_on_top)?;
+    cx.export_function("set_frameless", set_frameless)?;
     cx.export_function("set_ignore_cursor_events", set_ignore_cursor_events)?;
     Ok(())
 }
