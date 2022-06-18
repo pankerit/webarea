@@ -13,6 +13,7 @@ use wry::{
 };
 
 enum UserEvents {
+    UnsafeQuit(Root<JsFunction>),
     CreateNewWindow(Options, Root<JsFunction>),
     CloseWindow(WindowId, Root<JsFunction>),
     CenterWindow(WindowId, Root<JsFunction>),
@@ -31,7 +32,7 @@ enum UserEvents {
     CloseDevtools(WindowId, Root<JsFunction>),
     SetFramelessWindow(WindowId, bool, Root<JsFunction>),
     SetWindowIcon(WindowId, Vec<u8>, u32, u32, Root<JsFunction>),
-    // IpcPostMessage(WindowId, String),
+    IpcPostMessage(WindowId, String),
 }
 
 struct Options {
@@ -57,12 +58,14 @@ struct WindowIdBoxed {
 impl Finalize for WindowIdBoxed {}
 
 fn resolve_node_promise(channel: Channel, cb: Root<JsFunction>) {
-    channel.send(move |mut cx| {
-        let this = cx.undefined();
-        let callback = cb.into_inner(&mut cx);
-        let _ = callback.call(&mut cx, this, &[]);
-        Ok(())
-    });
+    let _ = channel
+        .send(move |mut cx| {
+            let this = cx.undefined();
+            let callback = cb.into_inner(&mut cx);
+            let _ = callback.call(&mut cx, this, &[]);
+            Ok(())
+        })
+        .join();
 }
 
 fn create_new_window(
@@ -86,8 +89,8 @@ fn create_new_window(
             let _ = proxy.send_event(UserEvents::DragWindow(window.id()));
         }
         _ if req.starts_with("ipc:") => {
-            // let message = req.replace("ipc:", "");
-            // let _ = proxy.send_event(UserEvents::IpcPostMessage(message));
+            let message = req.replace("ipc:", "");
+            let _ = proxy.send_event(UserEvents::IpcPostMessage(window.id(), message));
         }
         _ => {}
     };
@@ -96,7 +99,7 @@ fn create_new_window(
     let mut web_context = WebContext::new(Some(data_directory));
     let webview = WebViewBuilder::new(window)
         .unwrap()
-        // always should be fil
+        // always should be fill
         .with_initialization_script(&options.initialization_script)
         .with_transparent(options.transparent)
         .with_devtools(options.devtools)
@@ -120,7 +123,9 @@ fn app_init(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let event_loop: EventLoop<UserEvents> = EventLoop::new_any_thread();
         let proxy = event_loop.create_proxy();
         let mut webviews = HashMap::new();
-
+        std::panic::set_hook(Box::new(move |panic_info| {
+            println!("{}", panic_info);
+        }));
         event_loop.run(move |event, event_loop, control_flow| {
             *control_flow = ControlFlow::Wait;
             let listener_cb = listener_cb.clone();
@@ -152,8 +157,8 @@ fn app_init(mut cx: FunctionContext) -> JsResult<JsUndefined> {
                     });
                 }
                 Event::UserEvent(UserEvents::CloseWindow(window_id, cb)) => {
+                    resolve_node_promise(channel.clone(), cb);
                     webviews.remove(&window_id);
-                    resolve_node_promise(channel.clone(), cb)
                 }
                 Event::UserEvent(UserEvents::CenterWindow(window_id, cb)) => {
                     let webview = webviews.get(&window_id).unwrap();
@@ -189,7 +194,7 @@ fn app_init(mut cx: FunctionContext) -> JsResult<JsUndefined> {
                 }
                 Event::UserEvent(UserEvents::EvaluateScript(window_id, script, cb)) => {
                     let webview = webviews.get(&window_id).unwrap();
-                    webview.evaluate_script(&script);
+                    let _ = webview.evaluate_script(&script);
                     resolve_node_promise(channel.clone(), cb);
                 }
                 Event::UserEvent(UserEvents::SetWindowSize(window_id, width, height, cb)) => {
@@ -269,16 +274,52 @@ fn app_init(mut cx: FunctionContext) -> JsResult<JsUndefined> {
                     }
                 }
 
+                Event::UserEvent(UserEvents::UnsafeQuit(cb)) => {
+                    resolve_node_promise(channel.clone(), cb);
+                    panic!("unsafe quit");
+                }
                 Event::UserEvent(UserEvents::DragWindow(window_id)) => {
                     let webview = webviews.get(&window_id).unwrap();
                     let window = webview.window();
                     let _ = window.drag_window();
                 }
+                Event::UserEvent(UserEvents::IpcPostMessage(window_id, message)) => {
+                    channel.send(move |mut cx| {
+                        let this = cx.undefined();
+                        let callback = listener_cb.to_inner(&mut cx);
+                        let event = cx.string("ipc");
+                        let window_id_boxed = cx.boxed(WindowIdBoxed { window_id });
+                        let message = cx.string(message);
+                        let _ = callback.call(
+                            &mut cx,
+                            this,
+                            &[event.upcast(), window_id_boxed.upcast(), message.upcast()],
+                        );
+                        Ok(())
+                    });
+                }
                 Event::WindowEvent {
                     event, window_id, ..
                 } => match event {
                     WindowEvent::CloseRequested => {
-                        webviews.remove(&window_id);
+                        let _ = channel
+                            .send(move |mut cx| {
+                                let this = cx.undefined();
+                                let callback = listener_cb.to_inner(&mut cx);
+                                let event = cx.string("close-window");
+                                let window_id_boxed = cx.boxed(WindowIdBoxed { window_id });
+                                let _ = callback.call(
+                                    &mut cx,
+                                    this,
+                                    &[event.upcast(), window_id_boxed.upcast()],
+                                );
+                                Ok(())
+                            })
+                            .join();
+                    }
+                    WindowEvent::Resized(_) => {
+                        let webview = webviews.get(&window_id).unwrap();
+                        webview.resize().unwrap();
                     }
                     _ => {}
                 },
@@ -558,6 +599,29 @@ fn set_window_icon(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     Ok(cx.undefined())
 }
 
+fn compare_window_id(mut cx: FunctionContext) -> JsResult<JsBoolean> {
+    let window_id_a = cx.argument::<JsBox<WindowIdBoxed>>(0)?;
+    let window_id_b = cx.argument::<JsBox<WindowIdBoxed>>(1)?;
+
+    let window_id_a = window_id_a.deref();
+    let window_id_a = window_id_a.window_id.clone();
+
+    let window_id_b = window_id_b.deref();
+    let window_id_b = window_id_b.window_id.clone();
+    Ok(cx.boolean(window_id_a == window_id_b))
+}
+
+fn unsafe_quit(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let proxy = cx.argument::<JsBox<IpcBoxed>>(0)?;
+    let cb = cx.argument::<JsFunction>(1)?.root(&mut cx);
+
+    let proxy = proxy.deref();
+    let proxy = proxy.proxy.clone();
+
+    let _ = proxy.send_event(UserEvents::UnsafeQuit(cb));
+    Ok(cx.undefined())
+}
+
 #[neon::main]
 fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("app_init", app_init)?;
@@ -578,5 +642,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("close_devtools", close_devtools)?;
     cx.export_function("set_frameless_window", set_frameless_window)?;
     cx.export_function("set_window_icon", set_window_icon)?;
+    cx.export_function("compare_window_id", compare_window_id)?;
+    cx.export_function("unsafe_quit", unsafe_quit)?;
     Ok(())
 }
