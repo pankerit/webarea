@@ -11,7 +11,7 @@
         "build-release": "npm run build -- --release",
         "install": "npm run build-release",
         "test": "cargo test",
-        "dev": "esno watch webview.ts",
+        "dev": "esno watch ./lib/webview.ts",
         "deploy": "npm publish ./dist"
     },
     "author": "Costea",
