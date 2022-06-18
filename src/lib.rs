@@ -118,13 +118,17 @@ fn create(mut cx: FunctionContext) -> JsResult<JsPromise> {
             Ok(())
         });
 
+        std::panic::set_hook(Box::new(move |panic_info| {
+            println!("{}", panic_info);
+        }));
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Wait;
             let cb = cb_arc.clone();
             match event {
                 Event::UserEvent(UserEvents::CloseWindow(cb)) => {
-                    *control_flow = ControlFlow::Exit;
+                    // *control_flow = ControlFlow::Exit;
                     resolve_node_promise(channel.clone(), cb);
+                    panic!("close");
                 }
                 Event::UserEvent(UserEvents::IpcPostMessage(payload)) => {
                     channel.send(move |mut cx| {
@@ -238,7 +242,8 @@ fn create(mut cx: FunctionContext) -> JsResult<JsPromise> {
                 Event::NewEvents(StartCause::Init) => println!("Wry has started!"),
                 Event::WindowEvent { event, .. } => match event {
                     WindowEvent::CloseRequested => {
-                        *control_flow = ControlFlow::Exit;
+                        // *control_flow = ControlFlow::Exit;
+                        panic!("close");
                     }
                     WindowEvent::Resized(size) => {
                         if let Err(e) = webview.resize() {
