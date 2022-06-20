@@ -1,112 +1,62 @@
 import { EventEmitter } from "events";
+import * as app from "./app";
 import type { Bitmap, WebviewOptions } from "./types";
 const lib = require("./core");
 const preload = require("./preload");
 
-let _boxedIpc: any = null;
-function getBoxedIpc() {
-    if (!_boxedIpc) {
-        throw new Error("app must be initialized before use");
-    }
-    return _boxedIpc;
-}
-
-export const app = {
-    init: () =>
-        new Promise<void>((res) => {
-            const listener = (event: string, ...args: any[]) => {
-                switch (event) {
-                    case "ipc": {
-                        const [windowId, message] = args;
-                        const { channel, payload } = JSON.parse(message);
-                        const browserWindow = BrowserWindow.all.find((b) =>
-                            lib.compare_window_id(b.boxedWindowId, windowId)
-                        )!;
-                        browserWindow.ipc.emit(channel, payload);
-                        break;
-                    }
-                    case "close-window": {
-                        const [windowId] = args;
-                        const browserWindow = BrowserWindow.all.find((b) =>
-                            lib.compare_window_id(b.boxedWindowId, windowId)
-                        )!;
-                        browserWindow.close();
-                        break;
-                    }
-                    default: {
-                        console.log(event, args);
-                    }
-                }
-            };
-            lib.app_init(listener, (boxedIpc: any) => {
-                _boxedIpc = boxedIpc;
-                res();
-            });
-        }),
-    quit: () => {
-        console.log(BrowserWindow.all);
-        for (let browser of BrowserWindow.all) {
-            if (!browser.ready) {
-                throw new Error(
-                    `can't close browser while it's in process of initialization`
-                );
-            }
-        }
-        return Promise.all(BrowserWindow.all.map((b) => b.close()));
-    },
-    unsafe_quit: async () => {
-        await Promise.all(BrowserWindow.all.map((b) => b.close()));
-        return new Promise((res) => {
-            lib.unsafe_quit(getBoxedIpc(), res);
-        });
-    },
-};
-
 class Ipc extends EventEmitter {
-    constructor(private browserWindow: BrowserWindow) {
+    constructor(private webview: Webview) {
         super();
     }
 
     async send(channel: string, message: any) {
-        this.browserWindow.waitUntilReady();
-        this.browserWindow.evaluateScript(
+        this.webview.waitUntilReady();
+        this.webview.evaluateScript(
             `__NODE__.__emit('${channel}', '${JSON.stringify(message)}')`
         );
     }
 }
 
-export class BrowserWindow {
-    static all: BrowserWindow[] = [];
+export class Webview {
+    static all: Webview[] = [];
     ready = false;
     private waits: (() => void)[] = [];
     private closed = false;
     ipc = new Ipc(this);
     boxedWindowId: any;
-    #boxedIpc: any;
 
     constructor(private options: WebviewOptions = {}) {
-        BrowserWindow.all.push(this);
+        Webview.all.push(this);
         const defaultPayload = this.defaultOptions();
         const payload = { ...defaultPayload, ...options };
-        this.#boxedIpc = getBoxedIpc();
 
-        lib.create_new_window(
-            this.#boxedIpc,
-            payload.title,
-            payload.devtools,
-            payload.transparent,
-            payload.frameless,
-            payload.width,
-            payload.height,
-            payload.visible,
-            payload.resizable,
-            defaultPayload.preloadScript + (options.preloadScript || ""),
-            (boxedWindowId: any) => {
-                this.boxedWindowId = boxedWindowId;
-                this.ready = true;
-                this.waits.forEach((wait) => wait());
+        // init app
+        const init = async () => {
+            if (app._isStarted()) {
+                await app._waitUntilReady();
+            } else {
+                await app._init();
             }
-        );
+            lib.create_new_window(
+                app.getBoxedIpc(),
+                payload.title,
+                payload.devtools,
+                payload.transparent,
+                payload.frameless,
+                payload.width,
+                payload.height,
+                payload.visible,
+                payload.resizable,
+                defaultPayload.preloadScript + (options.preloadScript || ""),
+                (boxedWindowId: any) => {
+                    this.boxedWindowId = boxedWindowId;
+                    this.ready = true;
+                    this.waits.forEach((wait) => wait());
+                }
+            );
+        };
+
+        init();
     }
 
     async loadURL(url: string) {
@@ -131,11 +81,11 @@ export class BrowserWindow {
         }
         this.closed = true;
         this.ipc.removeAllListeners();
-        const index = BrowserWindow.all.indexOf(this);
-        BrowserWindow.all.splice(index, 1);
+        const index = Webview.all.indexOf(this);
+        Webview.all.splice(index, 1);
         await this.waitUntilReady();
         return new Promise((res) => {
-            lib.close_window(this.#boxedIpc, this.boxedWindowId, res);
+            lib.close_window(app.getBoxedIpc(), this.boxedWindowId, res);
         });
     }
 
@@ -145,7 +95,7 @@ export class BrowserWindow {
         }
         await this.waitUntilReady();
         return new Promise((res) => {
-            lib.focus_window(this.#boxedIpc, this.boxedWindowId, res);
+            lib.focus_window(app.getBoxedIpc(), this.boxedWindowId, res);
         });
     }
 
@@ -155,7 +105,7 @@ export class BrowserWindow {
         }
         await this.waitUntilReady();
         return new Promise((res) => {
-            lib.center_window(this.#boxedIpc, this.boxedWindowId, res);
+            lib.center_window(app.getBoxedIpc(), this.boxedWindowId, res);
         });
     }
 
@@ -166,7 +116,7 @@ export class BrowserWindow {
         await this.waitUntilReady();
         return new Promise((res) => {
             lib.set_visible_window(
-                this.#boxedIpc,
+                app.getBoxedIpc(),
                 this.boxedWindowId,
                 true,
                 res
@@ -181,7 +131,7 @@ export class BrowserWindow {
         await this.waitUntilReady();
         return new Promise((res) => {
             lib.set_visible_window(
-                this.#boxedIpc,
+                app.getBoxedIpc(),
                 this.boxedWindowId,
                 false,
                 res
@@ -196,7 +146,7 @@ export class BrowserWindow {
         await this.waitUntilReady();
         return new Promise((res) => {
             lib.set_minimized_window(
-                this.#boxedIpc,
+                app.getBoxedIpc(),
                 this.boxedWindowId,
                 true,
                 res
@@ -211,7 +161,7 @@ export class BrowserWindow {
         await this.waitUntilReady();
         return new Promise((res) => {
             lib.set_minimized_window(
-                this.#boxedIpc,
+                app.getBoxedIpc(),
                 this.boxedWindowId,
                 false,
                 res
@@ -226,7 +176,7 @@ export class BrowserWindow {
         await this.waitUntilReady();
         return new Promise((res) => {
             lib.set_title_window(
-                this.#boxedIpc,
+                app.getBoxedIpc(),
                 this.boxedWindowId,
                 title,
                 res
@@ -241,7 +191,7 @@ export class BrowserWindow {
         await this.waitUntilReady();
         return new Promise((res) => {
             lib.set_resizable_window(
-                this.#boxedIpc,
+                app.getBoxedIpc(),
                 this.boxedWindowId,
                 resizable,
                 res
@@ -256,7 +206,7 @@ export class BrowserWindow {
         await this.waitUntilReady();
         return new Promise((res) => {
             lib.evaluate_script(
-                this.#boxedIpc,
+                app.getBoxedIpc(),
                 this.boxedWindowId,
                 script,
                 res
@@ -271,7 +221,7 @@ export class BrowserWindow {
         await this.waitUntilReady();
         return new Promise((res) => {
             lib.set_window_size(
-                this.#boxedIpc,
+                app.getBoxedIpc(),
                 this.boxedWindowId,
                 width,
                 height,
@@ -287,7 +237,7 @@ export class BrowserWindow {
         await this.waitUntilReady();
         return new Promise((res) => {
             lib.get_window_size(
-                this.#boxedIpc,
+                app.getBoxedIpc(),
                 this.boxedWindowId,
                 (width: number, height: number) => {
                     res([width, height]);
@@ -303,7 +253,7 @@ export class BrowserWindow {
         await this.waitUntilReady();
         return new Promise((res) => {
             lib.set_always_on_top(
-                this.#boxedIpc,
+                app.getBoxedIpc(),
                 this.boxedWindowId,
                 alwaysOnTop,
                 res
@@ -318,7 +268,7 @@ export class BrowserWindow {
         await this.waitUntilReady();
         return new Promise((res) => {
             lib.set_ignore_cursor_events(
-                this.#boxedIpc,
+                app.getBoxedIpc(),
                 this.boxedWindowId,
                 true,
                 res
@@ -333,7 +283,7 @@ export class BrowserWindow {
         if (this.options.devtools) {
             await this.waitUntilReady();
             return new Promise((res) => {
-                lib.open_devtools(this.#boxedIpc, this.boxedWindowId, res);
+                lib.open_devtools(app.getBoxedIpc(), this.boxedWindowId, res);
             });
         } else {
             console.warn("Devtools are disabled");
@@ -346,7 +296,7 @@ export class BrowserWindow {
         }
         await this.waitUntilReady();
         return new Promise((res) => {
-            lib.close_devtools(this.#boxedIpc, this.boxedWindowId, res);
+            lib.close_devtools(app.getBoxedIpc(), this.boxedWindowId, res);
         });
     }
 
@@ -357,7 +307,7 @@ export class BrowserWindow {
         await this.waitUntilReady();
         return new Promise((res) => {
             lib.set_frameless_window(
-                this.#boxedIpc,
+                app.getBoxedIpc(),
                 this.boxedWindowId,
                 frameless,
                 res
@@ -372,7 +322,7 @@ export class BrowserWindow {
         await this.waitUntilReady();
         return new Promise((res) => {
             lib.set_window_icon(
-                this.#boxedIpc,
+                app.getBoxedIpc(),
                 this.boxedWindowId,
                 bitmap.data,
                 bitmap.height,
@@ -406,37 +356,3 @@ export class BrowserWindow {
         });
     }
 }
-
-async function test() {
-    await app.init();
-    console.log("app.init");
-
-    for (let i = 0; i < 10; i++) {
-        const window = new BrowserWindow({ devtools: true });
-        await window.openDevtools();
-        // await window.focus();
-        // await window.setFrameless(true);
-    }
-    await app.quit();
-
-    // setInterval(() => {});
-    // const webview = new Webview({
-    //     // frameless: true,
-    //     transparent: true,
-    //     resizable: true,
-    //     devtools: true,
-    // });
-    // webview.setTitle("Hello world");
-    // webview.setVisible(true);
-    // webview.focus();
-    // webview.openDevtools();
-    // webview.loadURL("https://www.google.com");
-    // let a = 0;
-    // setInterval(() => {
-    //     webview.setInnerSize(a, a);
-    //     a += 10;
-    // }, 1000);
-    // webview.setResizable(true);
-}
-
-// test();
