@@ -1,46 +1,10 @@
 import { EventEmitter } from "events";
-import type { Size } from "./types";
+import * as app from "./app";
+import type { Bitmap, WebviewOptions } from "./types";
 const lib = require("./core");
 const preload = require("./preload");
 
-interface Bitmap {
-    width: number;
-    height: number;
-    data: Buffer;
-}
-
-interface Context {
-    preload?: string;
-}
-
-interface WebviewOptions {
-    title?: string;
-    devtools?: boolean;
-    transparent?: boolean;
-    frameless?: boolean;
-    visible?: boolean;
-    resizable?: boolean;
-    innerSize?: Size;
-    context?: Context;
-}
-
-const defaultPayload: Required<WebviewOptions> = {
-    title: "My app",
-    devtools: true,
-    transparent: false,
-    frameless: false,
-    visible: true,
-    resizable: true,
-    innerSize: {
-        width: 800,
-        height: 600,
-    },
-    context: {
-        preload,
-    },
-};
-
-class EE extends EventEmitter {
+class Ipc extends EventEmitter {
     constructor(private webview: Webview) {
         super();
     }
@@ -54,115 +18,272 @@ class EE extends EventEmitter {
 }
 
 export class Webview {
-    private ready = false;
+    static all: Webview[] = [];
+    ready = false;
     private waits: (() => void)[] = [];
-    private internalEvents = new EventEmitter();
-    ipc = new EE(this);
-    #box: any;
+    private closed = false;
+    ipc = new Ipc(this);
+    boxedWindowId: any;
 
-    constructor(private option?: WebviewOptions) {
-        if (option?.context?.preload) {
-            defaultPayload.context.preload += option.context.preload;
-        }
-        const payload = Object.assign(defaultPayload, option);
-        (async () => {
-            this.#box = await lib.create(
-                this.listener,
+    constructor(private options: WebviewOptions = {}) {
+        Webview.all.push(this);
+        const defaultPayload = this.defaultOptions();
+        const payload = { ...defaultPayload, ...options };
+
+        // init app
+        const init = async () => {
+            if (app._isStarted()) {
+                await app._waitUntilReady();
+            } else {
+                await app._init();
+            }
+            lib.create_new_window(
+                app.getBoxedIpc(),
                 payload.title,
                 payload.devtools,
                 payload.transparent,
                 payload.frameless,
-                payload.innerSize.width,
-                payload.innerSize.height,
+                payload.width,
+                payload.height,
                 payload.visible,
                 payload.resizable,
-                payload.context.preload
+                defaultPayload.preloadScript + (options.preloadScript || ""),
+                (boxedWindowId: any) => {
+                    this.boxedWindowId = boxedWindowId;
+                    this.ready = true;
+                    this.waits.forEach((wait) => wait());
+                }
             );
-            this.ready = true;
-            this.waits.forEach((wait) => {
-                wait();
-            });
-        })();
+        };
+
+        init();
     }
 
-    private listener = (type: string, data: any) => {
-        console.log(type, data);
-        switch (type) {
-            case "getInnerSize": {
-                const { width, height } = data;
-                this.internalEvents.emit("getInnerSize", { width, height });
-                break;
-            }
-            case "ipc": {
-                const { channel, payload } = JSON.parse(data);
-                this.ipc.emit(channel, payload);
-                break;
-            }
+    async loadURL(url: string) {
+        if (this.closed) {
+            throw new Error("window is closed");
         }
-    };
+        await this.evaluateScript(`location.replace("${url}");`);
+    }
+
+    async loadHTML(html: string) {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
+        await this.evaluateScript(
+            `document.documentElement.innerHTML = \`${html}\``
+        );
+    }
 
     async close(): Promise<void> {
-        await this.waitUntilReady();
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
+        this.closed = true;
         this.ipc.removeAllListeners();
-        return new Promise((resolve) => {
-            lib.close(this.#box, resolve);
+        const index = Webview.all.indexOf(this);
+        Webview.all.splice(index, 1);
+        await this.waitUntilReady();
+        return new Promise((res) => {
+            lib.close_window(app.getBoxedIpc(), this.boxedWindowId, res);
         });
     }
 
     async focus(): Promise<void> {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
         await this.waitUntilReady();
         return new Promise((res) => {
-            lib.set_focus(this.#box, res);
+            lib.focus_window(app.getBoxedIpc(), this.boxedWindowId, res);
         });
     }
 
     async center(): Promise<void> {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
         await this.waitUntilReady();
         return new Promise((res) => {
-            lib.set_center(this.#box, res);
+            lib.center_window(app.getBoxedIpc(), this.boxedWindowId, res);
         });
     }
 
-    async minimized(): Promise<void> {
+    async show(): Promise<void> {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
         await this.waitUntilReady();
         return new Promise((res) => {
-            lib.set_minimized(this.#box, true, res);
+            lib.set_visible_window(
+                app.getBoxedIpc(),
+                this.boxedWindowId,
+                true,
+                res
+            );
         });
     }
 
-    async maximized(): Promise<void> {
+    async hide(): Promise<void> {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
         await this.waitUntilReady();
         return new Promise((res) => {
-            lib.set_minimized(this.#box, false, res);
+            lib.set_visible_window(
+                app.getBoxedIpc(),
+                this.boxedWindowId,
+                false,
+                res
+            );
+        });
+    }
+
+    async minimize(): Promise<void> {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
+        await this.waitUntilReady();
+        return new Promise((res) => {
+            lib.set_minimized_window(
+                app.getBoxedIpc(),
+                this.boxedWindowId,
+                true,
+                res
+            );
+        });
+    }
+
+    async maximize(): Promise<void> {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
+        await this.waitUntilReady();
+        return new Promise((res) => {
+            lib.set_minimized_window(
+                app.getBoxedIpc(),
+                this.boxedWindowId,
+                false,
+                res
+            );
         });
     }
 
     async setTitle(title: string): Promise<void> {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
         await this.waitUntilReady();
         return new Promise((res) => {
-            lib.set_title(this.#box, title, res);
-        });
-    }
-
-    async setVisible(visible: boolean): Promise<void> {
-        await this.waitUntilReady();
-        return new Promise((res) => {
-            lib.set_visible(this.#box, visible, res);
+            lib.set_title_window(
+                app.getBoxedIpc(),
+                this.boxedWindowId,
+                title,
+                res
+            );
         });
     }
 
     async setResizable(resizable: boolean): Promise<void> {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
         await this.waitUntilReady();
         return new Promise((res) => {
-            lib.set_resizable(this.#box, resizable, res);
+            lib.set_resizable_window(
+                app.getBoxedIpc(),
+                this.boxedWindowId,
+                resizable,
+                res
+            );
+        });
+    }
+
+    async evaluateScript(script: string): Promise<any> {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
+        await this.waitUntilReady();
+        return new Promise((res) => {
+            lib.evaluate_script(
+                app.getBoxedIpc(),
+                this.boxedWindowId,
+                script,
+                res
+            );
+        });
+    }
+
+    async setSize(width: number, height: number): Promise<any> {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
+        await this.waitUntilReady();
+        return new Promise((res) => {
+            lib.set_window_size(
+                app.getBoxedIpc(),
+                this.boxedWindowId,
+                width,
+                height,
+                res
+            );
+        });
+    }
+
+    async getSize(): Promise<[number, number]> {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
+        await this.waitUntilReady();
+        return new Promise((res) => {
+            lib.get_window_size(
+                app.getBoxedIpc(),
+                this.boxedWindowId,
+                (width: number, height: number) => {
+                    res([width, height]);
+                }
+            );
+        });
+    }
+
+    async setAlwaysOnTop(alwaysOnTop: boolean): Promise<void> {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
+        await this.waitUntilReady();
+        return new Promise((res) => {
+            lib.set_always_on_top(
+                app.getBoxedIpc(),
+                this.boxedWindowId,
+                alwaysOnTop,
+                res
+            );
+        });
+    }
+
+    async setIgnoreCursorEvents(): Promise<void> {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
+        await this.waitUntilReady();
+        return new Promise((res) => {
+            lib.set_ignore_cursor_events(
+                app.getBoxedIpc(),
+                this.boxedWindowId,
+                true,
+                res
+            );
         });
     }
 
     async openDevtools(): Promise<void> {
-        if (this.option?.devtools) {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
+        if (this.options.devtools) {
             await this.waitUntilReady();
             return new Promise((res) => {
-                lib.open_devtools(this.#box, res);
+                lib.open_devtools(app.getBoxedIpc(), this.boxedWindowId, res);
             });
         } else {
             console.warn("Devtools are disabled");
@@ -170,82 +291,60 @@ export class Webview {
     }
 
     async closeDevtools(): Promise<void> {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
         await this.waitUntilReady();
         return new Promise((res) => {
-            lib.close_devtools(this.#box, res);
+            lib.close_devtools(app.getBoxedIpc(), this.boxedWindowId, res);
         });
     }
 
-    async setInnerSize(width: number, height: number): Promise<void> {
-        await this.waitUntilReady();
-        return new Promise((resolve) => {
-            lib.set_inner_size(this.#box, width, height, resolve);
-        });
-    }
-
-    async getInnerSize(): Promise<Size> {
-        await this.waitUntilReady();
-        return new Promise((resolve) => {
-            lib.get_inner_size(this.#box, resolve);
-        });
-    }
-
-    // getOuterSize() {}
-
-    // setMinInnerSize(width: number, height: number) {}
-
-    // setMaxInnerSize(width: number, height: number) {}
-
-    async setFrameless(frameless: boolean) {
+    async setFrameless(frameless: boolean): Promise<void> {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
         await this.waitUntilReady();
         return new Promise((res) => {
-            lib.set_frameless(this.#box, frameless, res);
-        });
-    }
-    async setIgnoreCursorEvents(ignoreCursorEvents: boolean): Promise<void> {
-        await this.waitUntilReady();
-        return new Promise((res) => {
-            lib.set_ignore_cursor_events(this.#box, ignoreCursorEvents, res);
-        });
-    }
-
-    async setAlwaysOnTop(alwaysOnTop: boolean): Promise<void> {
-        await this.waitUntilReady();
-        return new Promise((res) => {
-            lib.set_always_on_top(this.#box, alwaysOnTop, res);
-        });
-    }
-
-    async loadURL(url: string) {
-        await this.waitUntilReady();
-        await this.evaluateScript(`location.replace("${url}");`);
-    }
-
-    async loadHTML(html: string) {
-        await this.waitUntilReady();
-        await this.evaluateScript(
-            `document.documentElement.innerHTML = \`${html}\``
-        );
-    }
-
-    async evaluateScript(script: string): Promise<void> {
-        await this.waitUntilReady();
-        return new Promise((res) => {
-            lib.evaluate_script(this.#box, script, res);
+            lib.set_frameless_window(
+                app.getBoxedIpc(),
+                this.boxedWindowId,
+                frameless,
+                res
+            );
         });
     }
 
     async setIcon(bitmap: Bitmap): Promise<void> {
+        if (this.closed) {
+            throw new Error("window is closed");
+        }
         await this.waitUntilReady();
         return new Promise((res) => {
-            lib.set_icon(
-                this.#box,
+            lib.set_window_icon(
+                app.getBoxedIpc(),
+                this.boxedWindowId,
                 bitmap.data,
-                bitmap.width,
                 bitmap.height,
+                bitmap.width,
                 res
             );
         });
+    }
+
+    private defaultOptions() {
+        const defaultPayload: Required<WebviewOptions> = {
+            title: "My app",
+            devtools: true,
+            transparent: false,
+            frameless: false,
+            visible: true,
+            resizable: true,
+            width: 800,
+            height: 600,
+            preloadScript: preload,
+        };
+        return defaultPayload;
     }
 
     waitUntilReady(): Promise<void> {
@@ -257,25 +356,3 @@ export class Webview {
         });
     }
 }
-
-// async function test() {
-//     const webview = new Webview({
-//         // frameless: true,
-//         transparent: true,
-//         resizable: true,
-//         devtools: true,
-//     });
-//     webview.setTitle("Hello world");
-//     webview.setVisible(true);
-//     webview.focus();
-//     webview.openDevtools();
-//     webview.loadURL("https://www.google.com");
-//     let a = 0;
-//     setInterval(() => {
-//         webview.setInnerSize(a, a);
-//         a += 10;
-//     }, 1000);
-//     webview.setResizable(true);
-// }
-
-// test();
