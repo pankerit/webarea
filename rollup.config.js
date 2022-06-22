@@ -16,7 +16,13 @@ const rollupData = {
         file: "./dist/index.js",
         format: "cjs",
     },
-    plugins: [typescript(), terser()],
+    plugins: [
+        typescript(),
+        isDev ? false : terser(),
+        replace({
+            "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV),
+        }),
+    ].filter(Boolean),
 };
 
 export default [
