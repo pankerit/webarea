@@ -17,7 +17,16 @@ class Ipc extends EventEmitter {
     }
 }
 
-export class Webview {
+export declare interface Webview {
+    on(event: "close", listener: () => void): this;
+    on(
+        event: "resize",
+        listener: (width: number, height: number) => void
+    ): this;
+    on(event: "move", listener: (x: number, y: number) => void): this;
+}
+
+export class Webview extends EventEmitter {
     static all: Webview[] = [];
     ready = false;
     private waits: (() => void)[] = [];
@@ -26,6 +35,7 @@ export class Webview {
     boxedWindowId: any;
 
     constructor(private options: WebviewOptions = {}) {
+        super();
         Webview.all.push(this);
         const defaultPayload = this.defaultOptions();
         const payload = { ...defaultPayload, ...options };

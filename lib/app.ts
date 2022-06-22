@@ -22,7 +22,26 @@ const listener = (event: string, ...args: any[]) => {
             const browserWindow = Webview.all.find((b) =>
                 lib.compare_window_id(b.boxedWindowId, windowId)
             )!;
-            browserWindow.close();
+
+            browserWindow.close().then(() => {
+                browserWindow.emit("close");
+            });
+            break;
+        }
+        case "resize-window": {
+            const [windowId, width, height] = args;
+            const browserWindow = Webview.all.find((b) =>
+                lib.compare_window_id(b.boxedWindowId, windowId)
+            )!;
+            browserWindow.emit("resize", width, height);
+            break;
+        }
+        case "move-window": {
+            const [windowId, x, y] = args;
+            const browserWindow = Webview.all.find((b) =>
+                lib.compare_window_id(b.boxedWindowId, windowId)
+            )!;
+            browserWindow.emit("move", x, y);
             break;
         }
         default: {

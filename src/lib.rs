@@ -320,6 +320,47 @@ fn app_init(mut cx: FunctionContext) -> JsResult<JsUndefined> {
                     WindowEvent::Resized(_) => {
                         let webview = webviews.get(&window_id).unwrap();
                         webview.resize().unwrap();
+                        let size = webview.window().inner_size();
+                        let _ = channel.send(move |mut cx| {
+                            let this = cx.undefined();
+                            let callback = listener_cb.to_inner(&mut cx);
+                            let event = cx.string("resize-window");
+                            let window_id_boxed = cx.boxed(WindowIdBoxed { window_id });
+                            let width = cx.number(size.width as f64);
+                            let height = cx.number(size.height as f64);
+                            let _ = callback.call(
+                                &mut cx,
+                                this,
+                                &[
+                                    event.upcast(),
+                                    window_id_boxed.upcast(),
+                                    width.upcast(),
+                                    height.upcast(),
+                                ],
+                            );
+                            Ok(())
+                        });
+                    }
+                    WindowEvent::Moved(size) => {
+                        let _ = channel.send(move |mut cx| {
+                            let this = cx.undefined();
+                            let callback = listener_cb.to_inner(&mut cx);
+                            let event = cx.string("move-window");
+                            let window_id_boxed = cx.boxed(WindowIdBoxed { window_id });
+                            let x = cx.number(size.x as f64);
+                            let y = cx.number(size.y as f64);
+                            let _ = callback.call(
+                                &mut cx,
+                                this,
+                                &[
+                                    event.upcast(),
+                                    window_id_boxed.upcast(),
+                                    x.upcast(),
+                                    y.upcast(),
+                                ],
+                            );
+                            Ok(())
+                        });
                     }
                     _ => {}
                 },
