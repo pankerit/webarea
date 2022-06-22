@@ -30,6 +30,7 @@ exec(`yarn tsc`, (err, stdout, stderr) => {
 });
 
 fs.copyFileSync("./scripts/downloader.js", "./dist/downloader.js");
+fs.copyFileSync("./README.md", "./dist/README.md");
 
 delete pkg.devDependencies;
 delete pkg.scripts;
