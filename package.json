@@ -1,11 +1,12 @@
 {
     "name": "webarea",
-    "version": "1.0.0-beta.3",
+    "version": "1.0.0-beta.4",
     "description": "",
     "main": "index.js",
     "types": "index.d.ts",
     "scripts": {
         "build:binaries": "node ./scripts/build-binaries.js",
+        "build:npm": "node ./scripts/build-npm.js",
         "build:binaries:dev": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics",
         "build-debug": "npm run build --",
         "build-release": "npm run build -- --release",
