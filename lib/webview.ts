@@ -1,8 +1,8 @@
 import { EventEmitter } from "events";
 import * as app from "./app";
+import { preload } from "./preload";
 import type { Bitmap, WebviewOptions } from "./types";
-const lib = require("./core");
-const preload = require("./preload");
+import lib from "./core";
 
 class Ipc extends EventEmitter {
     constructor(private webview: Webview) {

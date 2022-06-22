@@ -1,10 +1,8 @@
 const fs = require("fs-extra");
-const path = require("path");
-const pkg = require("./package.json");
 const { exec } = require("child_process");
 
 try {
-    fs.rmSync("./dist", { recursive: true });
+    fs.rmSync("./binaries", { recursive: true });
 } catch (e) {}
 
 const platforms = [
@@ -52,18 +50,3 @@ const buildBinaries = async () => {
 buildBinaries().then(() => {
     console.log("Build done, ready for publishing");
 });
-
-// execSync("yarn build-release:ia32");
-// execSync("yarn build-release:x64");
-// execSync("yarn tsc");
-
-// fs.copyFileSync("./README.md", "./dist/README.md");
-// fs.copyFileSync("./webarea_ia32.node", "./dist/webarea_ia32.node");
-// fs.copyFileSync("./webarea_x64.node", "./dist/webarea_x64.node");
-// fs.copyFileSync("./lib/core.js", "./dist/core.js");
-// fs.copyFileSync("./lib/preload.js", "./dist/preload.js");
-
-// delete pkg.devDependencies;
-// delete pkg.scripts;
-
-// fs.writeFileSync("./dist/package.json", JSON.stringify(pkg, null, 4));

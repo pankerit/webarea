@@ -1,4 +1,4 @@
-module.exports = `function preload() {
+export const preload = `
     // initialization
     let __NODE__ = {};
     __NODE__.dragWindow = () => {
@@ -33,4 +33,4 @@ module.exports = `function preload() {
             ipc.postMessage("drag-window");
         }
     });
-}` + ";preload();";
+`;

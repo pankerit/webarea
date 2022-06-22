@@ -1,5 +1,5 @@
 import { Webview } from "./webview";
-const lib = require("./core");
+import lib from "./core";
 
 let _boxedIpc: any = null;
 let _waits: (() => void)[] = [];

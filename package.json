@@ -1,15 +1,14 @@
 {
     "name": "webarea",
-    "version": "1.0.0-beta.1",
+    "version": "1.0.0-beta.3",
     "description": "",
     "main": "index.js",
+    "types": "index.d.ts",
     "scripts": {
-        "build-release:ia32": "cargo-cp-artifact -nc webarea_ia32.node -- cargo build --release --target=i686-pc-windows-msvc --message-format=json-render-diagnostics",
-        "build-release:x64": "cargo-cp-artifact -nc webarea_x64.node -- cargo build --release --target=x86_64-pc-windows-msvc --message-format=json-render-diagnostics",
-        "build": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics",
+        "build:binaries": "node ./scripts/build-binaries.js",
+        "build:binaries:dev": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics",
         "build-debug": "npm run build --",
         "build-release": "npm run build -- --release",
-        "install": "npm run build-release",
         "test": "cargo test",
         "dev": "esno watch ./lib/index.ts",
         "deploy": "npm publish ./dist"
@@ -17,10 +16,17 @@
     "author": "Costea",
     "license": "ISC",
     "devDependencies": {
+        "@rollup/plugin-replace": "^4.0.0",
+        "@rollup/plugin-typescript": "^8.3.3",
+        "@types/node": "^18.0.0",
         "cargo-cp-artifact": "^0.1",
-        "esno": "^0.16.3",
+        "cross-env": "^7.0.3",
         "fs-extra": "^10.1.0",
-        "jimp": "^0.16.1",
-        "typescript": "^4.7.3"
+        "nodemon": "^2.0.16",
+        "rollup": "^2.75.7",
+        "rollup-plugin-dts": "^4.2.2",
+        "rollup-plugin-terser": "^7.0.2",
+        "tslib": "^2.4.0",
+        "typescript": "^4.7.4"
     }
 }
