@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::{ops::Deref, sync::Arc};
 use wry::{
     application::{
-        dpi::{PhysicalPosition, PhysicalSize, Size},
+        dpi::{LogicalPosition, LogicalSize, Size},
         event::{Event, StartCause, WindowEvent},
         event_loop::{ControlFlow, EventLoop, EventLoopProxy, EventLoopWindowTarget},
         platform::windows::EventLoopExtWindows,
@@ -75,7 +75,7 @@ fn create_new_window(
 ) -> (WindowId, WebView) {
     let window = WindowBuilder::new()
         .with_title(options.title)
-        .with_inner_size(Size::new(PhysicalSize::new(options.width, options.height)))
+        .with_inner_size(Size::new(LogicalSize::new(options.width, options.height)))
         .with_visible(options.visible)
         .with_resizable(options.resizable)
         .with_transparent(options.transparent)
@@ -168,7 +168,7 @@ fn app_init(mut cx: FunctionContext) -> JsResult<JsUndefined> {
                         let window_size = window.inner_size();
                         let x = (screen_size.width - window_size.width) / 2;
                         let y = (screen_size.height - window_size.height) / 2;
-                        window.set_outer_position(PhysicalPosition::new(x, y));
+                        window.set_outer_position(LogicalPosition::new(x, y));
                         resolve_node_promise(channel.clone(), cb);
                     } else {
                         panic!("Could not get current monitor");
@@ -200,7 +200,7 @@ fn app_init(mut cx: FunctionContext) -> JsResult<JsUndefined> {
                 Event::UserEvent(UserEvents::SetWindowSize(window_id, width, height, cb)) => {
                     let webview = webviews.get(&window_id).unwrap();
                     let window = webview.window();
-                    window.set_inner_size(Size::new(PhysicalSize::new(width, height)));
+                    window.set_inner_size(Size::new(LogicalSize::new(width, height)));
                     resolve_node_promise(channel.clone(), cb);
                 }
                 Event::UserEvent(UserEvents::GetWindowSize(window_id, cb)) => {
