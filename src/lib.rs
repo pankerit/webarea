@@ -206,7 +206,8 @@ fn app_init(mut cx: FunctionContext) -> JsResult<JsUndefined> {
                 Event::UserEvent(UserEvents::GetWindowSize(window_id, cb)) => {
                     let webview = webviews.get(&window_id).unwrap();
                     let window = webview.window();
-                    let size = window.inner_size();
+                    let scale_factor = window.scale_factor();
+                    let size = window.inner_size().to_logical::<u32>(scale_factor);
                     channel.send(move |mut cx| {
                         let this = cx.undefined();
                         let callback = cb.into_inner(&mut cx);
