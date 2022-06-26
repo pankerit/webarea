@@ -4,6 +4,7 @@ import * as _app from "./app";
 export { Webview };
 
 export const app = {
+    on: _app.events.on.bind(_app.events),
     quit: _app.quit,
     unsafe_quit: _app.unsafe_quit,
 };

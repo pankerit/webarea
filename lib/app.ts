@@ -1,5 +1,8 @@
 import { Webview } from "./webview";
 import lib from "./core";
+import { EventEmitter } from "events";
+
+export const events = new EventEmitter();
 
 let _boxedIpc: any = null;
 let _waits: (() => void)[] = [];
@@ -8,6 +11,11 @@ let _start = false;
 
 const listener = (event: string, ...args: any[]) => {
     switch (event) {
+        case "error": {
+            const message = args[0];
+            events.emit("error", message);
+            break;
+        }
         case "ipc": {
             const [windowId, message] = args;
             const { channel, payload } = JSON.parse(message);

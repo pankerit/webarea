@@ -1,5 +1,6 @@
 use neon::{prelude::*, types::buffer::TypedArray};
 use std::collections::HashMap;
+use std::error;
 use std::{ops::Deref, sync::Arc};
 use wry::{
     application::{
@@ -11,6 +12,10 @@ use wry::{
     },
     webview::{WebContext, WebView, WebViewBuilder},
 };
+
+enum Error {
+    WebviewNotFound,
+}
 
 enum UserEvents {
     UnsafeQuit(Root<JsFunction>),
@@ -33,6 +38,7 @@ enum UserEvents {
     SetFramelessWindow(WindowId, bool, Root<JsFunction>),
     SetWindowIcon(WindowId, Vec<u8>, u32, u32, Root<JsFunction>),
     IpcPostMessage(WindowId, String),
+    OnError(Error),
 }
 
 struct Options {
@@ -72,7 +78,7 @@ fn create_new_window(
     options: Options,
     event_loop: &EventLoopWindowTarget<UserEvents>,
     proxy: EventLoopProxy<UserEvents>,
-) -> (WindowId, WebView) {
+) -> Result<(WindowId, WebView), Box<dyn error::Error>> {
     let window = WindowBuilder::new()
         .with_title(options.title)
         .with_inner_size(Size::new(LogicalSize::new(options.width, options.height)))
@@ -80,8 +86,8 @@ fn create_new_window(
         .with_resizable(options.resizable)
         .with_transparent(options.transparent)
         .with_decorations(!options.frameless)
-        .build(event_loop)
-        .unwrap();
+        .build(event_loop)?;
+
     let window_id = window.id();
 
     let handler = move |window: &Window, req: String| match req.as_str() {
@@ -97,19 +103,16 @@ fn create_new_window(
 
     let data_directory = std::env::temp_dir();
     let mut web_context = WebContext::new(Some(data_directory));
-    let webview = WebViewBuilder::new(window)
-        .unwrap()
+    let webview = WebViewBuilder::new(window)?
         // always should be fill
         .with_initialization_script(&options.initialization_script)
         .with_transparent(options.transparent)
         .with_devtools(options.devtools)
         .with_web_context(&mut web_context)
         .with_ipc_handler(handler)
-        .with_html("")
-        .unwrap()
-        .build()
-        .unwrap();
-    (window_id, webview)
+        .with_html("")?
+        .build()?;
+    Ok((window_id, webview))
 }
 
 fn app_init(mut cx: FunctionContext) -> JsResult<JsUndefined> {
@@ -144,17 +147,33 @@ fn app_init(mut cx: FunctionContext) -> JsResult<JsUndefined> {
                     });
                 }
                 Event::UserEvent(UserEvents::CreateNewWindow(option, cb)) => {
-                    let (window_id, webview) =
-                        create_new_window(option, &event_loop, proxy.clone());
-                    webviews.insert(window_id, webview);
-
-                    channel.send(move |mut cx| {
-                        let this = cx.undefined();
-                        let callback = cb.into_inner(&mut cx);
-                        let window_id_boxed = cx.boxed(WindowIdBoxed { window_id });
-                        let _ = callback.call(&mut cx, this, &[window_id_boxed.upcast()]);
-                        Ok(())
-                    });
+                    let result = create_new_window(option, &event_loop, proxy.clone());
+                    match result {
+                        Ok((window_id, webview)) => {
+                            webviews.insert(window_id, webview);
+                            channel.send(move |mut cx| {
+                                let this = cx.undefined();
+                                let callback = cb.into_inner(&mut cx);
+                                let window_id_boxed = cx.boxed(WindowIdBoxed { window_id });
+                                let _ = callback.call(&mut cx, this, &[window_id_boxed.upcast()]);
+                                Ok(())
+                            });
+                        }
+                        Err(_) => {
+                            channel.send(move |mut cx| {
+                                let this = cx.undefined();
+                                let callback = listener_cb.to_inner(&mut cx);
+                                let event = cx.string("error");
+                                let message = cx.string("Webview not found");
+                                let _ = callback.call(
+                                    &mut cx,
+                                    this,
+                                    &[event.upcast(), message.upcast()],
+                                );
+                                Ok(())
+                            });
+                        }
+                    }
                 }
                 Event::UserEvent(UserEvents::CloseWindow(window_id, cb)) => {
                     resolve_node_promise(channel.clone(), cb);

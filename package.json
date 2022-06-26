@@ -1,9 +1,15 @@
 {
     "name": "webarea",
-    "version": "1.0.0-beta.5",
+    "version": "1.0.0-beta.7",
     "description": "",
     "main": "index.js",
     "types": "index.d.ts",
+    "keywords": [
+        "web",
+        "webview",
+        "browser",
+        "native-webview"
+    ],
     "scripts": {
         "build:binaries": "node ./scripts/build-binaries.js",
         "build:npm": "node ./scripts/build-npm.js",
