@@ -13,7 +13,7 @@ const listener = (event: string, ...args: any[]) => {
     switch (event) {
         case "error": {
             const message = args[0];
-            events.emit("error", message);
+            events.emit("error", new Error(message));
             break;
         }
         case "ipc": {
